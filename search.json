@@ -1,0 +1,16 @@
+[
+  {
+    "objectID": "index.html",
+    "href": "index.html",
+    "title": "High Temperatures",
+    "section": "",
+    "text": "This graph shows the average daily air temperature in Seattle during the year 2023, using data collected from the Seattle-Tacoma International Airport weather station, sourced via the NOAA Integrated Surface Database (ISD).\nThe temperature values were obtained using the worldmet package, which allows access to global meteorological station data. The dataset includes hourly air temperature readings, which we aggregated into daily averages to show broader weather trends over time.\nFrom the graph, we can observe the expected seasonal pattern:\nCooler temperatures during the early and late months of the year\nA noticeable warming trend from spring into summer\nPeak temperatures around July–August, followed by a decline toward winter\nThis kind of analysis is useful for studying climate variability, seasonal forecasting, or for use in urban planning, agriculture, or energy consumption models that depend on temperature patterns.\n\n\nShiny applications not supported in static R Markdown documents"
+  },
+  {
+    "objectID": "about.html",
+    "href": "about.html",
+    "title": "About",
+    "section": "",
+    "text": "About this site"
+  }
+]
