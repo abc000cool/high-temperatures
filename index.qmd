@@ -1,5 +1,20 @@
 ---
 title: "High Temperatures"
+format:
+  html:
+    code-fold: true
+    toc: true
+    theme: cosmo
+    runtime: static  # no shiny
+    params:
+      selected_date:
+        label: "Select Date"
+        value: "2023-01-01"
+        input: date
+
+params:
+  selected_date: !expr Sys.Date()  # default to today or any date in 2023
+
 ---
 
 
@@ -57,73 +72,107 @@ This kind of analysis is useful for studying climate variability, seasonal forec
 
 
 ```{r echo=FALSE, message=FALSE, warning=FALSE}
-library(shiny)
+
 library(worldmet)
 library(dplyr)
 library(lubridate)
 library(leaflet)
 library(htmltools)
 
-# Load and prepare data once
+# Load data once (you could cache this chunk)
 met_data <- importNOAA(code = "727930-24233", year = 2023, hourly = TRUE)
+
 daily_temp <- met_data %>%
   filter(!is.na(air_temp)) %>%
   mutate(date = as.Date(date)) %>%
   group_by(date) %>%
   summarise(avg_temp_C = mean(air_temp, na.rm = TRUE)) %>%
   ungroup() %>%
-  mutate(latitude = 47.449, longitude = -122.309)
+  mutate(
+    latitude = 47.449,
+    longitude = -122.309
+  )
 
 pal <- colorNumeric("RdYlBu", domain = daily_temp$avg_temp_C, reverse = TRUE)
 
-ui <- fluidPage(
-  titlePanel("Seattle Daily Temperature (2023)"),
-  sidebarLayout(
-    sidebarPanel(
-      sliderInput("date", "Select date:",
-                  min = min(daily_temp$date),
-                  max = max(daily_temp$date),
-                  value = min(daily_temp$date),
-                  timeFormat = "%Y-%m-%d",
-                  animate = animationOptions(interval = 1000, loop = FALSE))
-    ),
-    mainPanel(
-      leafletOutput("tempMap")
-    )
+# Filter data by selected date from Quarto parameter
+selected_date <- as.Date(params$selected_date)
+data_sel <- daily_temp %>% filter(date == selected_date)
+
+leaflet(data_sel) %>%
+  addTiles() %>%
+  addCircleMarkers(
+    lng = ~longitude,
+    lat = ~latitude,
+    radius = 10,
+    color = ~pal(avg_temp_C),
+    stroke = FALSE,
+    fillOpacity = 0.9,
+    label = ~htmltools::HTML(paste0(
+      "<b>Date:</b> ", date, "<br>",
+      "<b>Avg Temp:</b> ", round(avg_temp_C, 1), " °C"
+    )),
+    labelOptions = labelOptions(direction = "auto")
+  ) %>%
+  addLegend(
+    position = "bottomright",
+    pal = pal,
+    values = daily_temp$avg_temp_C,
+    title = "Avg Temp (°C)"
   )
+
+
+```
+
+
+
+```{r, message=FALSE, warning=FALSE, echo=FALSE}
+library(ggplot2)
+library(dplyr)
+library(lubridate)
+
+# Simulate example data similar to Seattle daily max temps from 1979-2021
+set.seed(123)
+
+# Create a data frame with dates over multiple years
+dates <- seq(as.Date("1979-01-01"), as.Date("2021-12-31"), by = "day")
+
+# Simulate daily max temp (F) with a seasonal pattern + noise
+daily_max_temp <- 50 + 25 * sin(2 * pi * yday(dates) / 365) + rnorm(length(dates), 0, 10)
+daily_max_temp <- pmax(daily_max_temp, 10)  # no temps below 10F
+
+df <- data.frame(
+  date = dates,
+  max_temp_F = daily_max_temp
 )
 
-server <- function(input, output, session) {
-  filtered_data <- reactive({
-    daily_temp %>% filter(date == input$date)
-  })
+# Extract day of year for x-axis
+df <- df %>% mutate(doy = yday(date))
 
-  output$tempMap <- renderLeaflet({
-    data <- filtered_data()
-    leaflet(data) %>%
-      addTiles() %>%
-      addCircleMarkers(
-        lng = ~longitude,
-        lat = ~latitude,
-        radius = 10,
-        color = ~pal(avg_temp_C),
-        stroke = FALSE,
-        fillOpacity = 0.9,
-        label = ~htmltools::HTML(paste0(
-          "<b>Date:</b> ", date, "<br>",
-          "<b>Avg Temp:</b> ", round(avg_temp_C, 1), " °C"
-        )),
-        labelOptions = labelOptions(direction = "auto")
-      ) %>%
-      addLegend(
-        position = "bottomright",
-        pal = pal,
-        values = daily_temp$avg_temp_C,
-        title = "Avg Temp (°C)"
-      )
-  })
-}
+# Get last 3 days to highlight
+last_3_days <- tail(df, 3)
 
-shinyApp(ui, server)
-
+# Plot
+ggplot(df, aes(x = doy, y = max_temp_F)) +
+  geom_point(alpha = 0.2, color = "grey40", size = 1) +    # background points
+  geom_point(data = last_3_days, aes(x = doy, y = max_temp_F), color = "firebrick", size = 3) +  # highlight last 3 days
+  geom_text(data = last_3_days, aes(x = doy, y = max_temp_F, label = "Last 3 days"), 
+            color = "firebrick", size = 5, vjust = -1.2, fontface = "bold") +
+  scale_x_continuous(
+    breaks = c(1, 32, 60, 91, 121, 152, 182, 213, 244, 274, 305, 335),
+    labels = month.abb
+  ) +
+  labs(
+    title = "Daily maximum temperatures in Seattle, 1979-2021",
+    subtitle = "120 deg. Fahrenheit",
+    x = NULL,
+    y = NULL
+  ) +
+  theme_minimal(base_size = 14) +
+  theme(
+    plot.title = element_text(face = "bold"),
+    plot.subtitle = element_text(margin = margin(b = 15)),
+    axis.ticks = element_blank(),
+    panel.grid.minor = element_blank()
+  )
 ```
