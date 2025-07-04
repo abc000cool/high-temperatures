@@ -2,6 +2,128 @@
 title: "High Temperatures"
 ---
 
-This is a Quarto website.
 
-To learn more about Quarto websites visit <https://quarto.org/docs/websites>.
+```{r}
+#| warning: false
+#| echo: false
+#| message: false
+
+# Load necessary packages
+library(worldmet)
+library(dplyr)
+library(lubridate)
+library(ggplot2)
+
+# 1. Download metadata and find Seattle stations (no output shown)
+stations <- getMeta()
+seattle_stations <- stations %>%
+  filter(grepl("SEATTLE", station, ignore.case = TRUE)) %>%
+  arrange(station)
+
+# 2. Pick a Seattle station — Seattle-Tacoma Intl: USAF 727930, WBAN 24233
+met_data <- importNOAA(code = "727930-24233", year = 2023, hourly = TRUE)
+
+# 3. Clean and process temperature data
+daily_temp <- met_data %>%
+  filter(!is.na(air_temp)) %>%
+  mutate(date = as.Date(date)) %>%
+  group_by(date) %>%
+  summarise(avg_temp_C = mean(air_temp, na.rm = TRUE))
+
+# 4. Plot average daily temperature
+ggplot(daily_temp, aes(x = date, y = avg_temp_C)) +
+  geom_line(color = "steelblue", size = 0.8) +
+  labs(title = "Average Daily Temperature in Seattle (2023)",
+       x = "Date", y = "Temperature (°C)") +
+  theme_minimal()
+
+
+```
+
+This graph shows the average daily air temperature in Seattle during the year 2023, using data collected from the Seattle-Tacoma International Airport weather station, sourced via the NOAA Integrated Surface Database (ISD).
+
+The temperature values were obtained using the worldmet package, which allows access to global meteorological station data. The dataset includes hourly air temperature readings, which we aggregated into daily averages to show broader weather trends over time.
+
+From the graph, we can observe the expected seasonal pattern:
+
+Cooler temperatures during the early and late months of the year
+
+A noticeable warming trend from spring into summer
+
+Peak temperatures around July–August, followed by a decline toward winter
+
+This kind of analysis is useful for studying climate variability, seasonal forecasting, or for use in urban planning, agriculture, or energy consumption models that depend on temperature patterns.
+
+
+
+```{r echo=FALSE, message=FALSE, warning=FALSE}
+library(shiny)
+library(worldmet)
+library(dplyr)
+library(lubridate)
+library(leaflet)
+library(htmltools)
+
+# Load and prepare data once
+met_data <- importNOAA(code = "727930-24233", year = 2023, hourly = TRUE)
+daily_temp <- met_data %>%
+  filter(!is.na(air_temp)) %>%
+  mutate(date = as.Date(date)) %>%
+  group_by(date) %>%
+  summarise(avg_temp_C = mean(air_temp, na.rm = TRUE)) %>%
+  ungroup() %>%
+  mutate(latitude = 47.449, longitude = -122.309)
+
+pal <- colorNumeric("RdYlBu", domain = daily_temp$avg_temp_C, reverse = TRUE)
+
+ui <- fluidPage(
+  titlePanel("Seattle Daily Temperature (2023)"),
+  sidebarLayout(
+    sidebarPanel(
+      sliderInput("date", "Select date:",
+                  min = min(daily_temp$date),
+                  max = max(daily_temp$date),
+                  value = min(daily_temp$date),
+                  timeFormat = "%Y-%m-%d",
+                  animate = animationOptions(interval = 1000, loop = FALSE))
+    ),
+    mainPanel(
+      leafletOutput("tempMap")
+    )
+  )
+)
+
+server <- function(input, output, session) {
+  filtered_data <- reactive({
+    daily_temp %>% filter(date == input$date)
+  })
+
+  output$tempMap <- renderLeaflet({
+    data <- filtered_data()
+    leaflet(data) %>%
+      addTiles() %>%
+      addCircleMarkers(
+        lng = ~longitude,
+        lat = ~latitude,
+        radius = 10,
+        color = ~pal(avg_temp_C),
+        stroke = FALSE,
+        fillOpacity = 0.9,
+        label = ~htmltools::HTML(paste0(
+          "<b>Date:</b> ", date, "<br>",
+          "<b>Avg Temp:</b> ", round(avg_temp_C, 1), " °C"
+        )),
+        labelOptions = labelOptions(direction = "auto")
+      ) %>%
+      addLegend(
+        position = "bottomright",
+        pal = pal,
+        values = daily_temp$avg_temp_C,
+        title = "Avg Temp (°C)"
+      )
+  })
+}
+
+shinyApp(ui, server)
+
+```
